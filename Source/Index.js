@@ -87,13 +87,18 @@ Bot.once("clientReady", async() => {
 
 // Handling Messages
 Bot.on("messageCreate", async(recieved) => {
+    // Ignore null and bot recievers
     if (!recieved || recieved.author.bot) return;
 
     const Data = {
         AuthorID: recieved.author.id,
         GuildID: recieved.guild.id,
-        GuildOwnerID: recieved.guild.ownerId
+        GuildOwnerID: recieved.guild.ownerId,
+        Content: recieved.content,
     };
+
+    const Prefix = Data.Content.slice(0, 1);
+    console.log(Prefix);
 
     if (Config.DEBUG.MESSAGES) {
         console.log(Colors.BLUE + "Message Recieved:" + Colors.RESET + `\nAuthor ID: ${recieved.author.id}\nGuild ID: ${recieved.guild.id}\nGuild Owner ID: ${recieved.guild.ownerId}`);
@@ -118,11 +123,27 @@ Bot.on("messageCreate", async(recieved) => {
 
             ServerData[Data.GuildID] = { XP: 0, LEVEL: 0, MESSAGES: 0 };
             LevelData = ServerData[Data.GuildID];
-            await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData })
-        }
+            await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData });
+        };
     };
 
-    console.log(ServerData);
+    LevelData.XP += 50;
+    LevelData.MESSAGES++;
+    const ExperienceNeeded = 100 * (1 + LevelData.LEVEL);
+
+    if (LevelData.XP >= ExperienceNeeded) {
+        LevelData.XP = 0;
+        LevelData.LEVEL++;
+
+        if (Config.DEBUG.LEVEL_UP) {
+            console.log(Colors.GREEN + `Level up!${Colors.RESET}\nUser ID: ${Data.AuthorID}\nLevel: ${LevelData.LEVEL}`)
+        };
+
+        await recieved.reply(`Level up!\nYou are now Lvl. ${LevelData.LEVEL}`);
+    };
+
+    LevelData = ServerData[Data.GuildID];
+    await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData });
 });
 
 // Handling Interactions

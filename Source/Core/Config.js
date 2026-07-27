@@ -2,8 +2,10 @@ module.exports = {
     DEBUG: {
         MEMORY: false,
         MESSAGES: true,
+        MESSAGE_IGNORED: true,
         NEW_USER: true,
         NEW_GUILD_FOR_USER: true,
+        LEVEL_UP: true,
     },
     LIMIT: {
         MEMORY: 1024
@@ -19,4 +21,23 @@ module.exports = {
         RED: "\x1b[12",
         BOLD: "\x1b[1m"
     },
+
+    // Settings
+    PREFIX: {
+        COMMAND: "!",
+        IGNORE: [
+            "!",
+            "?",
+            "$",
+            "%",
+            "-",
+            ".",
+            ":",
+            ";",
+            "§",
+            "&",
+            "/",
+            "+"
+        ]
+    }
 }
