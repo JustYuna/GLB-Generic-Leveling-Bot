@@ -1,0 +1,13 @@
+{
+  "main": "Source/Index.js",
+  "name": "GLB",
+  "version": "2026.07",
+  "license": "AGPL v3",
+  "dependencies": {
+    "discord-api-types": "^0.38.51",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.4.2",
+    "nodejs-snowflake": "^2.0.1",
+    "sqlite3": "^6.0.1"
+  }
+}
