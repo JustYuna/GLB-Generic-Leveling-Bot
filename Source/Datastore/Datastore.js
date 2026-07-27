@@ -28,7 +28,7 @@ const CONFIG = {
 // Single-table structure, nested objects stored as JSON
 const defaultData = {
   DATE_JOINED: "NULL",
-  DATA_FROM_SERVERS: {}, // "S-ID: { XP: num, LEVEL: num, MESSAGES: num }"
+  DATA_FROM_SERVERS: {}, // "Server-ID: { XP: num, LEVEL: num, MESSAGES: num }"
 };
 
 

@@ -93,32 +93,47 @@ Bot.on("messageCreate", async(recieved) => {
         AuthorID: recieved.author.id,
         GuildID: recieved.guild.id,
         GuildOwnerID: recieved.guild.ownerId
-    }
+    };
 
     if (Config.DEBUG.MESSAGES) {
         console.log(Colors.BLUE + "Message Recieved:" + Colors.RESET + `\nAuthor ID: ${recieved.author.id}\nGuild ID: ${recieved.guild.id}\nGuild Owner ID: ${recieved.guild.ownerId}`);
-    }
+    };
 
     const DateJoined = await GetAsync(Data.AuthorID, "DATE_JOINED");
 
     if (DateJoined === "NULL") {
         if (Config.DEBUG.NEW_USER) {
             console.log(Colors.GREEN + "New user successfully indexed" + Colors.RESET)
-        }
+        };
 
-        await SetAsync(Data.AuthorID, { "DATE_JOINED": `${Date.now()}` })
-    }
+        await SetAsync(Data.AuthorID, { "DATE_JOINED": `${Date.now()}` });
+    };
+
+    const ServerData = await GetAsync(Data.AuthorID, "DATA_FROM_SERVERS") || {};
+    let LevelData = ServerData[Data.GuildID];
+
+    if (!LevelData) {
+        if (Config.DEBUG.NEW_GUILD_FOR_USER) {
+            console.log(Colors.GREEN + "Indexing new guild for user with id:" + Colors.BLUE + ` ${Data.AuthorID} ` + Colors.RESET);
+
+            ServerData[Data.GuildID] = { XP: 0, LEVEL: 0, MESSAGES: 0 };
+            LevelData = ServerData[Data.GuildID];
+            await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData })
+        }
+    };
+
+    console.log(ServerData);
 });
 
 // Handling Interactions
 Bot.on("interactionCreate", async(interaction) => {
 
-})
+});
 
 // Login
 if (ENV.TOKEN) {
     Bot.login(ENV.TOKEN);
-    console.log(Colors.GREEN + "Logged in successfully" + Colors.RESET)
+    console.log(Colors.GREEN + "Logged in successfully" + Colors.RESET);
 } else {
-    console.log(Colors.RED + "[ERROR]: " + Colors.RESET + "NO TOKEN SET IN ENV.")
-}
+    console.log(Colors.RED + "[ERROR]: " + Colors.RESET + "NO TOKEN SET IN ENV.");
+};

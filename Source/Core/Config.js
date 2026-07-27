@@ -3,6 +3,7 @@ module.exports = {
         MEMORY: false,
         MESSAGES: true,
         NEW_USER: true,
+        NEW_GUILD_FOR_USER: true,
     },
     LIMIT: {
         MEMORY: 1024
