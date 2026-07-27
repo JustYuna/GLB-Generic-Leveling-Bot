@@ -190,7 +190,7 @@ async function initDB() {
 
 // ------------------ Create / Get / Set ------------------
 async function createUser(userId) {
-  await runAsync(`INSERT OR IGNORE INTO users (id, setting_hidden_from_leaderboard) VALUES (?, 0)`, [userId]);
+  await runAsync(`INSERT OR IGNORE INTO users (id) VALUES (?)`, [userId]);
 }
 
 async function GetAsync(userId, key) {
@@ -339,5 +339,5 @@ module.exports = {
   removeUser,
 
   // Startup
-  initDB,
+  initDB
 };

@@ -1,6 +1,8 @@
 module.exports = {
     DEBUG: {
-        MEMORY: true
+        MEMORY: false,
+        MESSAGES: true,
+        NEW_USER: true,
     },
     LIMIT: {
         MEMORY: 1024

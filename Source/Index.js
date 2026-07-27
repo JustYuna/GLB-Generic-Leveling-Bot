@@ -4,7 +4,7 @@
 const ENV = require("dotenv").config().parsed;
 const { GetRate, AddRate } = require("./Utilities/Functional/Ratelimit");
 const LoadModules = require("./Utilities/Functional/LoadModules");
-const { ActivityType, Client, GatewayIntentBits, Options } = require("discord.js");
+const { ActivityType, Client, GatewayIntentBits, Options, ReactionCollector } = require("discord.js");
 const Config = require("./Core/Config");
 const { initDB, GetAsync, SetAsync, AddToAsync } = require("./Datastore/Datastore");
 
@@ -86,15 +86,28 @@ Bot.once("clientReady", async() => {
 })
 
 // Handling Messages
-Bot.on("messageCreate", async(Data) => {
-    if (!Data || !Data.client) return;
+Bot.on("messageCreate", async(recieved) => {
+    if (!recieved || recieved.author.bot) return;
 
-    const User = {
-        Client = Data.client,
+    const Data = {
+        AuthorID: recieved.author.id,
+        GuildID: recieved.guild.id,
+        GuildOwnerID: recieved.guild.ownerId
     }
 
-    console.log(User);
-    console.log(User.Client);
+    if (Config.DEBUG.MESSAGES) {
+        console.log(Colors.BLUE + "Message Recieved:" + Colors.RESET + `\nAuthor ID: ${recieved.author.id}\nGuild ID: ${recieved.guild.id}\nGuild Owner ID: ${recieved.guild.ownerId}`);
+    }
+
+    const DateJoined = await GetAsync(Data.AuthorID, "DATE_JOINED");
+
+    if (DateJoined === "NULL") {
+        if (Config.DEBUG.NEW_USER) {
+            console.log(Colors.GREEN + "New user successfully indexed" + Colors.RESET)
+        }
+
+        await SetAsync(Data.AuthorID, { "DATE_JOINED": `${Date.now()}` })
+    }
 });
 
 // Handling Interactions
@@ -105,6 +118,7 @@ Bot.on("interactionCreate", async(interaction) => {
 // Login
 if (ENV.TOKEN) {
     Bot.login(ENV.TOKEN);
+    console.log(Colors.GREEN + "Logged in successfully" + Colors.RESET)
 } else {
     console.log(Colors.RED + "[ERROR]: " + Colors.RESET + "NO TOKEN SET IN ENV.")
 }
