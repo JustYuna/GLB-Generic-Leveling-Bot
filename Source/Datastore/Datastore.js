@@ -29,6 +29,7 @@ const CONFIG = {
 const defaultData = {
   DATE_JOINED: "NULL",
   DATA_FROM_SERVERS: {}, // "Server-ID: { XP: num, LEVEL: num, MESSAGES: num }"
+  SETTINGS: {},
 };
 
 

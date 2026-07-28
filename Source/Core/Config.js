@@ -1,11 +1,13 @@
 module.exports = {
     DEBUG: {
         MEMORY: false,
-        MESSAGES: true,
-        MESSAGE_IGNORED: true,
-        NEW_USER: true,
-        NEW_GUILD_FOR_USER: true,
-        LEVEL_UP: true,
+        MESSAGES: false,
+        MESSAGE_IGNORED: false,
+        NEW_USER: false,
+        NEW_GUILD_FOR_USER: false,
+        LEVEL_UP: false,
+
+        IS_CHANGING_SETTINGS: false,
     },
     LIMIT: {
         MEMORY: 1024
@@ -23,8 +25,12 @@ module.exports = {
     },
 
     // Settings
+    FALLBACK: {
+        LEVEL_UP_MESSAGE: "**Level up!**\n{user_nick} is now Lvl. {level_new} 🎉!"
+    },
+
     PREFIX: {
-        COMMAND: "!",
+        SETTINGS: "!settings",
         IGNORE: [
             "!",
             "?",
