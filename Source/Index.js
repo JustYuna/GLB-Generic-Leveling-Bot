@@ -31,12 +31,15 @@ const Bot = new Client({
         MessageManager: 50,       // keep messages small
         UserManager: 1000,        // max 1000 users in cache
         GuildMemberManager: 500,  // max 500 members per guild
-        ThreadManager: 0,        // limit threads per channel
+        ThreadManager: 2,        // limit threads per channel
     })
 });
 
 // Yuna Print / Client Status / Memory Monitoring
 async function YunaPrint() {
+    const version = require('../package.json').version;
+    const tag = Bot?.user?.tag || 'Starting...';
+
     console.log();
     console.log(Colors.GREEN + '╔═══════════════════════════════════════════════════════════════════════════════╗' + Colors.RESET);
     console.log(Colors.GREEN + '║' + Colors.RESET);
@@ -54,11 +57,10 @@ async function YunaPrint() {
     console.log(Colors.GREEN + '║' + Colors.YELLOW + `  Logged in as: ${tag}` + Colors.RESET);
     console.log(Colors.GREEN + '╚═══════════════════════════════════════════════════════════════════════════════╝' + Colors.RESET);
     console.log();
-}
+};
 
 Bot.once("clientReady", async() => {
-    const version = require('../package.json').version;
-    const tag = Bot?.user?.tag || 'Starting...';
+    YunaPrint();
 
     Bot.user.setPresence({
         activities: [{
@@ -91,11 +93,28 @@ Bot.once("clientReady", async() => {
 // Handling Messages
 
 // Helper
-async function ReplyMessage(recieved, string) {
-    try {
-        await recieved.reply(string);
-    } catch (error) {
-        console.log(Colors.RED + `Failed to send level up message with error:\n${error}`);
+async function ReplyMessage(Recieved, String, ChannelID) {
+    if (ChannelID === "REMOVE") return;
+
+    if (!ChannelID || ChannelID === "NULL") {
+        try {
+            await Recieved.reply(String);
+        } catch (error) {
+            console.log(Colors.RED + `Failed to send level up message with error:\n${error}`);
+        };
+    } else {
+        const Channel = await Bot.channels.fetch(ChannelID);
+
+        // FAllback to normal reply
+        if (!Channel) {
+            ReplyMessage(Recieved, String)
+        };
+
+        try {
+            await Channel.send(String);
+        } catch (error) {
+            ReplyMessage(Recieved, String + `\nError with set-channel: ${error}`);
+        }
     };
 };
 
@@ -132,11 +151,7 @@ const CommandFunctions = {
             Message: GuildSettings.LEVEL_UP_MESSAGE
         });
 
-        if (GuildSettings.LEVEL_UP_CHANNEL === "NULL") {
-            ReplyMessage(Data.Recieved, Message)
-        } else {
-            Bot.channels.get(GuildSettings.LEVEL_UP_CHANNEL);
-        };
+        ReplyMessage(Data.Recieved, Message, GuildSettings.LEVEL_UP_CHANNEL);
     },
 
     "level-up-message": async ({ Data, GuildSettings, Arguments }) => {
@@ -146,10 +161,71 @@ const CommandFunctions = {
             LEVEL_UP_MESSAGE: Message,
             LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL
         };
-        console.log(GuildSettings);
         await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings })
 
         Data.Recieved.reply(`New message set to:\n'${Message}'\n Use !settings test to test the message out.`)
+    },
+
+    "set-channel": async ({ Data, GuildSettings, Arguments }) => {
+        const Input = Arguments[0].toUpperCase();
+
+        if (!Input) {
+            Data.Recieved.reply("Please chose a channel or type **NULL** to set a level up message channel.");
+            return;
+        };
+
+        if (Input === "NULL") {
+            GuildSettings = {
+                LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
+                LEVEL_UP_CHANNEL: "NULL"
+            };
+            await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
+
+            Data.Recieved.reply("Level up channel successfully removed.");
+            return;
+        };
+
+        if (Input === "REMOVE") {
+            GuildSettings = {
+                LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
+                LEVEL_UP_CHANNEL: "REMOVE"
+            };
+            await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
+
+            Data.Recieved.reply("Level up messages successfully disabled.");
+            return;
+        };
+
+        const MessageLenght = Input.length;
+        const ChannelID = Input.slice(2, (MessageLenght - 1));
+        const Surrounding = Input.slice(0, 2) + Input.slice((MessageLenght - 1), MessageLenght);
+
+        if (Surrounding !== "<#>") {
+            Data.Recieved.reply("Channel does not exist or was not found.");
+            return;
+        };
+
+        const Channel = await Bot.channels.fetch(ChannelID);
+
+        if (!Channel) {
+            Data.Recieved.reply("Channel does not exist or was not found.");
+            return;
+        };
+
+        let Message;
+        try {
+            Message = await Channel.send("Setting channel to recieve level-up messages...");
+
+            GuildSettings = {
+                LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
+                LEVEL_UP_CHANNEL: ChannelID
+            };
+            await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
+
+            Data.Recieved.reply("Level up channel successfully removed.");
+        } catch(error) {
+            Data.Recieved.reply(`Failed to set channel with error:\n${error}`);
+        };
     },
 };
 
@@ -264,11 +340,7 @@ Setting: ${CommandName}`);
             Message: GuildSettings.LEVEL_UP_MESSAGE
         });
 
-        if (GuildSettings.LEVEL_UP_CHANNEL === "NULL") {
-            ReplyMessage(Data.Recieved, Message)
-        } else {
-            Bot.channels.get(GuildSettings.LEVEL_UP_CHANNEL);
-        };
+        ReplyMessage(Data.Recieved, Message, GuildSettings.LEVEL_UP_CHANNEL);
     };
 
     LevelData = ServerData[Data.GuildID];
