@@ -104,6 +104,7 @@ async function ReplyMessage(Recieved, String, ChannelID) {
         } catch (error) {
             console.log(Colors.RED + `Failed to send level up message with error:\n${error}`);
         };
+
     } else {
         const Channel = await Bot.channels.fetch(ChannelID);
 
@@ -112,11 +113,13 @@ async function ReplyMessage(Recieved, String, ChannelID) {
             ReplyMessage(Recieved, String)
         };
 
-        try {
+        const HasPerms= await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("Send Messages");
+
+        if (HasPerms) {
             await Channel.send(String);
-        } catch (error) {
+        } else {
             ReplyMessage(Recieved, String + `\nError with set-channel: ${error}`);
-        }
+        };
     };
 };
 
@@ -257,20 +260,18 @@ const CommandFunctions = {
             return;
         };
 
-        let Message;
-        try {
-            Message = await Channel.send("Setting channel to recieve level-up messages...");
-
+        const HasPerms= await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("Send Messages");
+        if (HasPerms) {
             GuildSettings = {
                 LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
                 LEVEL_UP_CHANNEL: ChannelID,
                 EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION,
             };
             await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
-
-            Data.Recieved.reply("Level up channel successfully removed.");
-        } catch(error) {
-            Data.Recieved.reply(`Failed to set channel with error:\n${error}`);
+            
+            Data.Recieved.reply(`Level up channel successfully set to: <#${ChannelID}>`);
+        } else {
+            Data.Recieved.reply(`Bot has no permissions to send messages to <#${ChannelID}>`);
         };
     },
 
