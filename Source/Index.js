@@ -296,7 +296,7 @@ const CommandFunctions = {
                 EXPERIENCE_CALCULATION: Input,
             };
         } else {
-            Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50} + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
+            Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50) + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
             return;
         };
     },
