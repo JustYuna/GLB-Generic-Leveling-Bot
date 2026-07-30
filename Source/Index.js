@@ -400,7 +400,7 @@ Setting: ${CommandName}`);
 
     LevelData.XP += 15;
     LevelData.MESSAGES++;
-    const ExperienceNeeded = GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
+    const ExperienceNeeded = await GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
 
     if (LevelData.XP >= ExperienceNeeded) {
         LevelData.XP = 0;
