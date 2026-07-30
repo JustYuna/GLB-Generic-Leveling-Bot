@@ -8,6 +8,8 @@ const { ActivityType, Client, GatewayIntentBits, Options, ReactionCollector, Aut
 const Config = require("./Core/Config");
 const { initDB, GetAsync, SetAsync, AddToAsync } = require("./Datastore/Datastore");
 const { CheckMissingValues } = require("./Utilities/Functional/CommandHelper");
+const Cachemaid = require("./Utilities/Functional/CacheMaid");
+const CacheMaid = require("./Utilities/Functional/CacheMaid");
 
 /*
 * const OnCommand = require("./Core/-")
@@ -140,6 +142,46 @@ async function PraseLevelUpMessage({ UserName, UserNick, UserId, Level, Message 
     return Result;
 }
 
+const LevelSaveMap = CacheMaid.new("LevelSaveMap");
+async function GetExperienceNeeded({ GuildSettings, Level }) {
+    const ExperienceCalculation = GuildSettings.EXPERIENCE_CALCULATION;
+    if (!LevelSaveMap.map[ExperienceCalculation]) LevelSaveMap.map[GuildSettings.EXPERIENCE_CALCULATION] = {};
+
+    const LevelMap = LevelSaveMap.map[ExperienceCalculation];
+
+    if (LevelMap[Level]) {
+        return LevelMap[Level];
+    } else {
+        let Needed = 100; // Fallback to 100 of non match
+
+        // Credit to Arcane for math formulas, cause i wanna be lazy.
+        switch (ExperienceCalculation) {
+            case "LINEAR": {
+                Needed = (Level * 100) + 75;
+                LevelMap[Level] = Needed;
+                return Needed;
+            }
+
+            case "EXPONENTIAL": {
+                Needed = 5 * (Level^2) + (Level * 50) + 75;
+                LevelMap[Level] = Needed;
+                return Needed;
+            }
+
+            case "FLAT": {
+                LevelMap[Level] = 1000;
+                return 1000;
+            }
+
+            case "NORMAL": {
+                Needed = 100 * (1 + Level);
+                LevelMap[Level] = Needed;
+                return Needed;
+            }
+        };
+    };
+}
+
 const CommandFunctions = {
     "test": async ({ Data, GuildSettings }) => {
         const RandomLevel = Math.round(Math.random() * 50);
@@ -159,7 +201,8 @@ const CommandFunctions = {
 
         GuildSettings = {
             LEVEL_UP_MESSAGE: Message,
-            LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL
+            LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL,
+            EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION
         };
         await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings })
 
@@ -167,7 +210,7 @@ const CommandFunctions = {
     },
 
     "set-channel": async ({ Data, GuildSettings, Arguments }) => {
-        const Input = Arguments[0].toUpperCase();
+        const Input = Arguments[0]?.toUpperCase();
 
         if (!Input) {
             Data.Recieved.reply("Please chose a channel or type **NULL** to set a level up message channel.");
@@ -177,7 +220,8 @@ const CommandFunctions = {
         if (Input === "NULL") {
             GuildSettings = {
                 LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
-                LEVEL_UP_CHANNEL: "NULL"
+                LEVEL_UP_CHANNEL: "NULL",
+                EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION
             };
             await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
 
@@ -188,7 +232,8 @@ const CommandFunctions = {
         if (Input === "REMOVE") {
             GuildSettings = {
                 LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
-                LEVEL_UP_CHANNEL: "REMOVE"
+                LEVEL_UP_CHANNEL: "REMOVE",
+                EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION
             };
             await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
 
@@ -218,13 +263,41 @@ const CommandFunctions = {
 
             GuildSettings = {
                 LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
-                LEVEL_UP_CHANNEL: ChannelID
+                LEVEL_UP_CHANNEL: ChannelID,
+                EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION,
             };
             await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
 
             Data.Recieved.reply("Level up channel successfully removed.");
         } catch(error) {
             Data.Recieved.reply(`Failed to set channel with error:\n${error}`);
+        };
+    },
+
+    "set-xp-calculation": async ({ Data, GuildSettings, Arguments }) => {
+        const Input = Arguments[1]?.toUpperCase();
+
+        if (!Input) {
+            Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50} + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
+            return;
+        };
+
+        const Available = [
+            "LINEAR",
+            "EXPONENTIAL",
+            "FLAT",
+            "NORMAL"
+        ];
+
+        if (Available.includes(Input)) {
+            GuildSettings = {
+                LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
+                LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL,
+                EXPERIENCE_CALCULATION: Input,
+            };
+        } else {
+            Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50} + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
+            return;
         };
     },
 };
@@ -246,18 +319,20 @@ Bot.on("messageCreate", async(recieved) => {
 
     let GuildSettings = await GetAsync(Data.GuildDataID, "SETTINGS");
     const SettingValidateError = await CheckMissingValues(GuildSettings, {
-        requiredProps: ["LEVEL_UP_MESSAGE", "LEVEL_UP_CHANNEL"],
+        requiredProps: ["LEVEL_UP_MESSAGE", "LEVEL_UP_CHANNEL", "EXPERIENCE_CALCULATION"],
         typeChecks: {
             LEVEL_UP_MESSAGE: "string",
-            LEVEL_UP_CHANNEL: "string"
+            LEVEL_UP_CHANNEL: "string",
+            EXPERIENCE_CALCULATION: "string"
         },
         minValues: []
     });
 
     if (SettingValidateError.needsReset) {
         GuildSettings = {
-            LEVEL_UP_MESSAGE: Config.FALLBACK.LEVEL_UP_MESSAGE,
-            LEVEL_UP_CHANNEL: "NULL"
+            LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE ? GuildSettings.LEVEL_UP_MESSAGE : Config.FALLBACK.LEVEL_UP_MESSAGE,
+            LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL ? GuildSettings.LEVEL_UP_CHANNEL : "NULL",
+            EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION ? GuildSettings.EXPERIENCE_CALCULATION : Config.FALLBACK.EXPERIENCE_CALCULATION
         };
         await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings })
     };
@@ -324,7 +399,7 @@ Setting: ${CommandName}`);
 
     LevelData.XP += 15;
     LevelData.MESSAGES++;
-    const ExperienceNeeded = 100 * (1 + LevelData.LEVEL);
+    const ExperienceNeeded = GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
 
     if (LevelData.XP >= ExperienceNeeded) {
         LevelData.XP = 0;

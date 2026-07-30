@@ -26,7 +26,8 @@ module.exports = {
 
     // Settings
     FALLBACK: {
-        LEVEL_UP_MESSAGE: "**Level up!**\n{user_nick} is now Lvl. {level_new} 🎉!"
+        LEVEL_UP_MESSAGE: "**Level up!**\n{user_nick} is now Lvl. {level_new} 🎉!",
+        EXPERIENCE_CALCULATION: "LINEAR"
     },
 
     PREFIX: {
