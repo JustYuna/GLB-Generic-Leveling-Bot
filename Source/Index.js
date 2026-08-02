@@ -1,7 +1,7 @@
 // -- Certified Yuna Index.js -- //
 
 // Required
-const ENV = require("dotenv").config().parsed;
+const Token = require("../token");
 const { GetRate, AddRate } = require("./Utilities/Functional/Ratelimit");
 const LoadModules = require("./Utilities/Functional/LoadModules");
 const { ActivityType, Client, GatewayIntentBits, Options, ReactionCollector, AuthorizingIntegrationOwners, Guild } = require("discord.js");
@@ -108,14 +108,15 @@ async function ReplyMessage(Recieved, String, ChannelID) {
     } else {
         const Channel = await Bot.channels.fetch(ChannelID);
 
-        // FAllback to normal reply
+        // Fallback to normal reply
         if (!Channel) {
             ReplyMessage(Recieved, String)
         };
 
-        const HasPerms= await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("Send Messages");
+        const CanRead = await Recieved.guild.members.me?.permissionsIn(Channel).has("READ_MESSAGE_HISTORY");
+        const CanSend = await Recieved.guild.members.me?.permissionsIn(Channel).has("SEND_MESSAGES");
 
-        if (HasPerms) {
+        if (CanRead || CanSend) {
             await Channel.send(String);
         } else {
             ReplyMessage(Recieved, String + `\nError with set-channel: ${error}`);
@@ -260,8 +261,10 @@ const CommandFunctions = {
             return;
         };
 
-        const HasPerms= await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("Send Messages");
-        if (HasPerms) {
+        const CanRead = await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("READ_MESSAGE_HISTORY");
+        const CanSend = await Data.Recieved.guild.members.me?.permissionsIn(Channel).has("SEND_MESSAGES");
+
+        if (CanRead || CanSend) {
             GuildSettings = {
                 LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE,
                 LEVEL_UP_CHANNEL: ChannelID,
@@ -276,7 +279,7 @@ const CommandFunctions = {
     },
 
     "set-xp-calculation": async ({ Data, GuildSettings, Arguments }) => {
-        const Input = Arguments[1]?.toUpperCase();
+        const Input = Arguments[0]?.toUpperCase();
 
         if (!Input) {
             Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50} + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
@@ -296,6 +299,9 @@ const CommandFunctions = {
                 LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL,
                 EXPERIENCE_CALCULATION: Input,
             };
+            await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings });
+
+            ReplyMessage(Data.Recieved, `Set xp calculation to ${Input}`);
         } else {
             Data.Recieved.reply("No input, please chose any of the following:\nLinear: (Level * 100) + 75\nExponential: 5 * (Level^2) + (Level * 50) + 75\nFlat: 1000\nNormal: 100 * (Level + 1)");
             return;
@@ -341,7 +347,7 @@ Bot.on("messageCreate", async(recieved) => {
     // Handle settings
     if (Data.Content.startsWith(Config.PREFIX.SETTINGS)) {
         if (Data.AuthorID !== Data.GuildOwnerID) {
-            ReplyMessage("You must be the owner to change settings.");
+            ReplyMessage(Data.Recieved, "You must be the owner to change settings.");
             return;
         };
 
@@ -356,6 +362,8 @@ Setting: ${CommandName}`);
 
         if (CommandFunctions[CommandName]) {
             CommandFunctions[CommandName]({ Data: Data, GuildSettings: GuildSettings, Arguments: Arguments });
+        } else {
+            ReplyMessage(Data.Recieved, "Invalid command");
         };
 
         return;
@@ -398,7 +406,7 @@ Setting: ${CommandName}`);
         await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData });
     };
 
-    LevelData.XP += 15;
+    LevelData.XP += 5;
     LevelData.MESSAGES++;
     const ExperienceNeeded = await GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
 
@@ -429,9 +437,10 @@ Bot.on("interactionCreate", async(interaction) => {
 });
 
 // Login
-if (ENV.TOKEN) {
-    Bot.login(ENV.TOKEN);
+if (Token.TOKEN) {
+    Bot.login(Token.TOKEN);
     console.log(Colors.GREEN + "Logged in successfully" + Colors.RESET);
 } else {
     console.log(Colors.RED + "[ERROR]: " + Colors.RESET + "NO TOKEN SET IN ENV.");
+    process.exit(1);
 };
