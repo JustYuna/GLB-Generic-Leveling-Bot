@@ -1,23 +1,31 @@
 // -- Certified Yuna Index.js -- //
 
 // Required
-const Token = require("../token");
-const { GetRate, AddRate } = require("./Utilities/Functional/Ratelimit");
+const Token = require("../env");
+const { setCooldown, checkCooldown } = require("./Utilities/Functional/Cooldown");
 const LoadModules = require("./Utilities/Functional/LoadModules");
-const { ActivityType, Client, GatewayIntentBits, Options, ReactionCollector, AuthorizingIntegrationOwners, Guild } = require("discord.js");
+const { REST } = require("@discordjs/rest");
+const {
+    ActivityType,
+    Client,
+    GatewayIntentBits,
+    Options,
+    ReactionCollector,
+    AuthorizingIntegrationOwners,
+    Guild,
+    EmbedBuilder
+
+} = require("discord.js");
 const Config = require("./Core/Config");
 const { initDB, GetAsync, SetAsync, AddToAsync } = require("./Datastore/Datastore");
 const { CheckMissingValues } = require("./Utilities/Functional/CommandHelper");
-const Cachemaid = require("./Utilities/Functional/CacheMaid");
 const CacheMaid = require("./Utilities/Functional/CacheMaid");
-
-/*
-* const OnCommand = require("./Core/-")
-* const OnMessage = require("./Core/-");
-*/
+const ParseString = require("./Utilities/Functional/ParseString");
+const RefreshCommands = require("./Utilities/Functional/RefreshCommands");
 
 // Variables
 const Colors = Config.CONSOLE_COLORS;
+const RestClient = new REST({ version: "10" }).setToken(Token.TOKEN);
 
 // Setup DB
 initDB().catch(console.error);
@@ -92,7 +100,7 @@ Bot.once("clientReady", async() => {
     }, 10000);
 })
 
-// Handling Messages
+// #region Handling Messages
 
 // Helper
 async function ReplyMessage(Recieved, String, ChannelID) {
@@ -123,28 +131,6 @@ async function ReplyMessage(Recieved, String, ChannelID) {
         };
     };
 };
-
-async function PraseLevelUpMessage({ UserName, UserNick, UserId, Level, Message }) {
-    const Context = {
-        user_nick: UserNick,
-        user_name: UserName,
-        user_ping: `<@${UserId}>`,
-        level_new: Level,
-        level_old: Level - 1,
-    };
-
-    let Result = Message;
-    let Previous;
-
-    do {
-        Previous = Result;
-        Result = Result.replace(/{(\w+)}/g, (match, key) => {
-            return Context[key] !== undefined ? Context[key] : match;
-        });
-    } while (Result !== Previous);
-
-    return Result;
-}
 
 const LevelSaveMap = CacheMaid.new("LevelSaveMap");
 async function GetExperienceNeeded({ GuildSettings, Level }) {
@@ -184,18 +170,36 @@ async function GetExperienceNeeded({ GuildSettings, Level }) {
             }
         };
     };
-}
+};
+
+
+/**
+ * Returns the level up message with only GuildSettings and Data as input.
+ *
+ * @param {string} GuildSettings
+ * @param {object} Data
+ */
+async function GetLevelUpMessage(GuildSettings, Data) {
+    const Context = {
+        "{user_nick}": Data.AuthorNick,
+        "{user_name}": Data.AuthorName,
+        "{user_ping}": `<@${Data.AuthorID}>`,
+        "{level_new}": Data.Level,
+        "{level_old}": (Data.Level - 1)
+    };
+
+    return await ParseString(GuildSettings.LEVEL_UP_MESSAGE, Context);
+};
 
 const CommandFunctions = {
     "test": async ({ Data, GuildSettings }) => {
         const RandomLevel = Math.round(Math.random() * 50);
-        const Message = await PraseLevelUpMessage({
-            UserName: Data.AuthorName,
-            UserNick: Data.AuthorNick,
-            UserId: Data.AuthorID,
-            Level: RandomLevel,
-            Message: GuildSettings.LEVEL_UP_MESSAGE
-        });
+        const Message = await GetLevelUpMessage(GuildSettings, {
+            AuthorName: Data.AuthorName,
+            AuthorNick: Data.AuthorNick,
+            AuthorID: Data.AuthorID,
+            Level: RandomLevel
+        })
 
         ReplyMessage(Data.Recieved, Message, GuildSettings.LEVEL_UP_CHANNEL);
     },
@@ -248,15 +252,9 @@ const CommandFunctions = {
         const MessageLenght = Input.length;
         const ChannelID = Input.slice(2, (MessageLenght - 1));
         const Surrounding = Input.slice(0, 2) + Input.slice((MessageLenght - 1), MessageLenght);
-
-        if (Surrounding !== "<#>") {
-            Data.Recieved.reply("Channel does not exist or was not found.");
-            return;
-        };
-
         const Channel = await Bot.channels.fetch(ChannelID);
 
-        if (!Channel) {
+        if (Surrounding !== "<#>" || !Channel) {
             Data.Recieved.reply("Channel does not exist or was not found.");
             return;
         };
@@ -325,6 +323,8 @@ Bot.on("messageCreate", async(recieved) => {
     };
 
     let GuildSettings = await GetAsync(Data.GuildDataID, "SETTINGS");
+    let GuildData = await GetAsync(Data.GuildDataID, "DATA_FROM_SERVERS");
+
     const SettingValidateError = await CheckMissingValues(GuildSettings, {
         requiredProps: ["LEVEL_UP_MESSAGE", "LEVEL_UP_CHANNEL", "EXPERIENCE_CALCULATION"],
         typeChecks: {
@@ -342,6 +342,11 @@ Bot.on("messageCreate", async(recieved) => {
             EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION ? GuildSettings.EXPERIENCE_CALCULATION : Config.FALLBACK.EXPERIENCE_CALCULATION
         };
         await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings })
+    };
+
+    if (!GuildData[Data.AuthorID]) {
+        GuildData[Data.AuthorID.toString()] = 0;
+        await SetAsync(Data.GuildDataID, { "DATA_FROM_SERVERS": GuildData });
     };
 
     // Handle settings
@@ -410,18 +415,35 @@ Setting: ${CommandName}`);
     LevelData.MESSAGES++;
     const ExperienceNeeded = await GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
 
+    let FakeMessages = LevelData.MESSAGES;
+    const Step = 1000;
+    const Message = "Dring sum water please.";
+    do {
+        FakeMessages = FakeMessages - Step;
+    } while (FakeMessages > Step);
+
+    if (FakeMessages === Step) {
+        await Data.Recieved.reply(Message);
+    };
+
+    if (GuildData[Data.AuthorID.toString()] !== LevelData.LEVEL) {
+        GuildData[Data.AuthorID.toString()] = LevelData.LEVEL;
+    };
+
     if (LevelData.XP >= ExperienceNeeded) {
         LevelData.XP = 0;
         LevelData.LEVEL++;
 
         if (Config.DEBUG.LEVEL_UP) console.log(Colors.GREEN + `Level up!${Colors.RESET}\nUser ID: ${Data.AuthorID}\nLevel: ${LevelData.LEVEL}`);
 
-        const Message = await PraseLevelUpMessage({
-            UserName: Data.AuthorName,
-            UserNick: Data.AuthorNick,
-            UserId: Data.AuthorID,
-            Level: LevelData.LEVEL,
-            Message: GuildSettings.LEVEL_UP_MESSAGE
+        GuildData[Data.AuthorID.toString()] = LevelData.LEVEL;
+        await SetAsync(Data.GuildDataID, { "DATA_FROM_SERVERS": GuildData });
+
+        const Message = await GetLevelUpMessage(GuildSettings, {
+            AuthorName: Data.AuthorName,
+            AuthorNick: Data.AuthorNick,
+            AuthorID: Data.AuthorID,
+            Level: LevelData.LEVEL
         });
 
         ReplyMessage(Data.Recieved, Message, GuildSettings.LEVEL_UP_CHANNEL);
@@ -431,13 +453,208 @@ Setting: ${CommandName}`);
     await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": ServerData });
 });
 
-// Handling Interactions
-Bot.on("interactionCreate", async(interaction) => {
+// #endregion
 
+
+// #region Handling Interactions [Commands]
+
+const Commands = {
+    // Types:
+    // 3: Predefined Choise / String
+    // 4: Number
+    // 5: Boolean
+    // 6: User
+    // 7: Channel
+    // 8: Role
+
+    "leaderboard": {
+        data: {
+            name: "leaderboard",
+            description: "Check the servers leaderboard"
+        },
+
+        run: async (Interaction) => {
+            const GuildID = Interaction.guild.id;
+            const GuildDataID = `Guild-${GuildID}`
+
+            let GuildData = await GetAsync(GuildDataID, "DATA_FROM_SERVERS");
+
+            let Sortable = []
+            for (var UserID in GuildData) {
+               Sortable.push([UserID, GuildData[UserID]]); 
+            };
+
+            Sortable.sort(function(a, b) {
+                return a[1] - b[1];
+            });
+
+            Sortable.reverse();
+
+            let LineCount = 0;
+            let Lines = "";
+
+            do {
+                const UserID = Sortable[LineCount][0];
+                let Username = UserID;
+                if (!UserID) break;
+
+                const CachedUsername = Bot.users.cache.get(UserID);
+
+                if (CachedUsername) {
+                    Username = CachedUsername.globalName;
+                } else {
+                    try {
+                        const Fetched = await Bot.users.fetch(UserID);
+                        Username = Fetched.globalName;
+                    } catch {
+                        Username = `Could not fetch`;
+                    };
+                };
+
+                if (LineCount !== 10) {
+                    Lines = Lines + `**${Username}** - ${Sortable[LineCount][1]}\n`
+                } else {
+                    Lines = Lines + `**${Username}** - ${Sortable[LineCount][1]}`
+                };
+
+                LineCount++;
+            } while (LineCount < 10);
+
+            const Embed = new EmbedBuilder()
+                .setColor([250, 100, 150])
+                .setTitle(`${Interaction.guild.name}'s Leaderboard`)
+                .setDescription(Lines);
+
+            return Interaction.editReply({ embeds: [Embed] });
+        }
+    },
+
+    "level": {
+        data: {
+            name: "level",
+            description: "Check your or another ones current level",
+            options: [
+                { name: "user", type: 6, required: true, description: "User" }
+            ]
+        },
+
+        run: async (Interaction) => {
+            const Option = Interaction.options.getUser("user");
+            const User = Option || Interaction.user;
+            const UserID = User.id;
+            const GuildID = Interaction.guild.id;
+            const GuildDataID = `Guild-${GuildID}`
+
+            if (User.bot) {
+                return Interaction.editReply("Cannot check the level of a bot.");
+            };
+
+            const Data = await GetAsync(UserID, "DATA_FROM_SERVERS");
+            let GuildSettings = await GetAsync(GuildDataID, "SETTINGS");
+            let GuildData = await GetAsync(GuildDataID, "DATA_FROM_SERVERS");
+
+            const SettingValidateError = await CheckMissingValues(GuildSettings, {
+                requiredProps: ["LEVEL_UP_MESSAGE", "LEVEL_UP_CHANNEL", "EXPERIENCE_CALCULATION"],
+                typeChecks: {
+                    LEVEL_UP_MESSAGE: "string",
+                    LEVEL_UP_CHANNEL: "string",
+                    EXPERIENCE_CALCULATION: "string"
+                },
+                minValues: []
+            });
+
+            if (SettingValidateError.needsReset) {
+                GuildSettings = {
+                    LEVEL_UP_MESSAGE: GuildSettings.LEVEL_UP_MESSAGE ? GuildSettings.LEVEL_UP_MESSAGE : Config.FALLBACK.LEVEL_UP_MESSAGE,
+                    LEVEL_UP_CHANNEL: GuildSettings.LEVEL_UP_CHANNEL ? GuildSettings.LEVEL_UP_CHANNEL : "NULL",
+                    EXPERIENCE_CALCULATION: GuildSettings.EXPERIENCE_CALCULATION ? GuildSettings.EXPERIENCE_CALCULATION : Config.FALLBACK.EXPERIENCE_CALCULATION
+                };
+                await SetAsync(Data.GuildDataID, { "SETTINGS": GuildSettings })
+            };
+
+            let LevelData = Data[GuildID];
+
+            if (!LevelData) {
+                if (Config.DEBUG.NEW_GUILD_FOR_USER) console.log(Colors.GREEN + "Indexing new guild for user with id:" + Colors.BLUE + ` ${Data.AuthorID} ` + Colors.RESET);
+
+                Data[GuildID] = { XP: 0, LEVEL: 0, MESSAGES: 0 };
+                LevelData = Data[GuildID];
+                await SetAsync(Data.AuthorID, { "DATA_FROM_SERVERS": Data });
+            };
+
+            const ExperienceNeeded = await GetExperienceNeeded({ GuildSettings: GuildSettings, Level: LevelData.LEVEL });
+
+            const Embed = new EmbedBuilder()
+                .setColor([100, 250, 225])
+                .setTitle(`${User.globalName}'s level`)
+                .setDescription(`**Level:** ${LevelData.LEVEL}
+**Experience:** ${LevelData.XP}/${ExperienceNeeded}
+**Messages:** ${LevelData.MESSAGES}`);
+
+            return Interaction.editReply({ embeds: [Embed] });
+        }
+    }
+};
+
+
+
+Bot.on("interactionCreate", async(interaction) => {
+    if (!interaction?.isChatInputCommand()) return;
+
+    const { commandName, user, guild } = interaction;
+
+    const CommandName = interaction.commandName;
+    const User = interaction.user;
+    const Guild = interaction.guild;
+
+    if (User.bot) return;
+
+    // ========================
+    // Defer
+    // ========================
+    if (!interaction.deferred && !interaction.replied) {
+        try {
+            await interaction.deferReply();
+        } catch (err) {
+            if (err.code === DISCORD_ERRORS.UNKNOWN_INTERACTION || err.code === DISCORD_ERRORS.INTERACTION_ALREADY_ACKNOWLEDGED) {
+                console.log(`[Interaction Log] ${interaction.user.tag} interaction expired or was already handled.`);
+                return;
+            }
+
+            // Log other serious errors (API down, etc.)
+            console.error("Critical error during deferral:", err);
+            return;
+        }
+    };
+
+    // ========================
+    // Gather base variables
+    // ========================
+    const userId = user.id;
+    const { data, settings, run } = Commands[commandName];
+
+    if (!data || !run) {
+        return interaction.editReply("Command is currently incomplete setup");
+    };
+
+    try {
+        await run(interaction);
+    } catch(err) {
+        console.log(`Command ${CommandName} failed to execute with error: ` + err);
+        interaction.editReply("Command not available at this time.");
+    };
 });
 
-// Login
+// #endregion
+
+// Login / Startup
 if (Token.TOKEN) {
+    const Refresh = false;
+
+    if (Refresh) {
+        RefreshCommands(RestClient, Token.CLIENT_ID, Commands)
+    };
+
     Bot.login(Token.TOKEN);
     console.log(Colors.GREEN + "Logged in successfully" + Colors.RESET);
 } else {

@@ -4,7 +4,7 @@
  * Supports auto-eviction, scheduled cleanup, and freshness-aware sweeps.
  * 
  * Version - 1.3
- * Creator - @Snuv
+ * Creator - @Yuna2077
  */
 
 const { warn } = require('node:console');

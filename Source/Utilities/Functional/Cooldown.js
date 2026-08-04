@@ -1,6 +1,5 @@
 // Cooldown.js
 const CacheMaid = require("./CacheMaid");
-const configManager = require("../Core/configManager")
 
 const cooldowns = CacheMaid.new("cooldown");
 
@@ -39,7 +38,7 @@ async function checkCooldown(interaction, command) {
     const expiration = userMap.get(command);
     if (expiration && expiration > Date.now()) {
         const remainingSeconds = Math.ceil((expiration - Date.now()) / 1000);
-        const msg = configManager.getMsg("CORE.MESSAGES.ACTION_COOLDOWN", { command: command, remainingSeconds: remainingSeconds })
+        const msg = `⏳ You are on cooldown for ${command}. Please wait **${remainingSeconds}** second(s).`;
 
         await interaction.editReply({
             content: msg,
